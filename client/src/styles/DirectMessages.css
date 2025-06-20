@@ -1,0 +1,118 @@
+.direct-messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.dm-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 1px solid #202225;
+  background-color: #36393f;
+}
+
+.dm-logo {
+  width: 22px;
+  height: 22px;
+  margin-right: 10px;
+  border-radius: 50%;
+}
+
+.no-contacts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: #72767d;
+  text-align: center;
+  height: 100%;
+}
+
+.no-contacts p {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.no-contacts small {
+  font-size: 12px;
+}
+
+.contact-list {
+  list-style: none;
+  padding: 0 8px;
+}
+
+.contact {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  margin-bottom: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.contact:hover {
+  background-color: #36393f;
+}
+
+.contact.active {
+  background-color: #393c43;
+}
+
+.contact-avatar {
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+}
+
+.contact-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contact-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.contact-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #dcddde;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-status {
+  font-size: 12px;
+  color: #b9bbbe;
+}
+
+.unread-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background-color: #f04747;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}

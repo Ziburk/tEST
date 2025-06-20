@@ -1,0 +1,273 @@
+.direct-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  background-color: #36393f;
+  border-radius: 5px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.direct-chat-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #2f3136;
+  border-bottom: 1px solid #202225;
+  height: 48px;
+  box-shadow: 0 1px 0 rgba(4,4,5,0.2), 0 1.5px 0 rgba(6,6,7,0.05), 0 2px 0 rgba(4,4,5,0.05);
+  z-index: 10;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #42464D;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  position: relative;
+  margin-right: 10px;
+}
+
+.avatar.online::after,
+.avatar.idle::after,
+.avatar.dnd::after,
+.avatar.offline::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  bottom: 0;
+  right: 0;
+  border: 2px solid #36393f;
+}
+
+.avatar.online::after {
+  background-color: #43b581;
+}
+
+.avatar.idle::after {
+  background-color: #faa61a;
+}
+
+.avatar.dnd::after {
+  background-color: #f04747;
+}
+
+.avatar.offline::after {
+  background-color: #747f8d;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.username {
+  font-weight: bold;
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.status {
+  font-size: 12px;
+  color: #b9bbbe;
+  text-transform: capitalize;
+}
+
+.direct-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: calc(100% - 120px); /* Учитываем высоту header и input */
+  margin-bottom: 0;
+  background-color: #36393f;
+  scroll-behavior: smooth;
+}
+
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+  background-color: #36393f;
+}
+
+.empty-state-content {
+  max-width: 400px;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #2f3136;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.empty-state-content h3 {
+  margin-bottom: 10px;
+  color: #ffffff;
+}
+
+.empty-state-content p {
+  color: #b9bbbe;
+}
+
+.no-messages {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #2f3136;
+  color: #b9bbbe;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.loading-messages, .error-messages {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: #b9bbbe;
+  font-style: italic;
+}
+
+/* Стили для поля ввода сообщений */
+.message-input-wrapper {
+  width: 100%;
+  padding: 0 16px 24px;
+  background-color: #36393f;
+  border-top: 1px solid rgba(32, 34, 37, 0.2);
+  z-index: 10;
+  position: relative;
+  margin-top: auto;
+}
+
+.message-input-container {
+  width: 100%;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  background-color: #40444b;
+  border-radius: 8px;
+  transition: border-color 0.2s ease-in-out;
+  margin: 0;
+  height: 44px;
+  margin-top: 10px;
+  max-width: 100%;
+}
+
+.empty-state h3 {
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: #b9bbbe;
+}
+
+.no-messages {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #b9bbbe;
+  text-align: center;
+  padding: 20px;
+}
+
+.no-messages p {
+  font-size: 16px;
+  line-height: 20px;
+  max-width: 480px;
+  margin: 8px 0;
+}
+
+.loading-messages,
+.error-messages {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #b9bbbe;
+  font-size: 16px;
+  flex-direction: column;
+}
+
+.loading-messages:before {
+  content: '';
+  width: 32px;
+  height: 32px;
+  border: 3px solid #72767d;
+  border-radius: 50%;
+  border-top-color: #dcddde;
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-messages {
+  color: #f04747;
+}
+
+.error-messages:before {
+  content: '⚠️';
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.typing-indicator {
+  color: #b9bbbe;
+  font-style: italic;
+  font-size: 12px;
+  margin-top: 4px;
+  padding-left: 16px;
+}
+
+/* Стили для поля ввода текста в стиле Discord */
+.message-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 16px;
+  outline: none;
+  padding: 10px 0;
+  line-height: 1.5;
+}
+
+.send-button {
+  background-color: transparent;
+  border: none;
+  color: #b9bbbe;
+  cursor: pointer;
+  transition: color 0.2s;
+  font-size: 18px;
+  padding: 0 8px;
+}
+
+.send-button:hover {
+  color: white;
+}

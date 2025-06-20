@@ -1,0 +1,20 @@
+/* Переопределения для удаления синего цвета из интерфейса */
+[style*="background-color: rgb(88, 101, 242)"],
+[style*="background-color:#5865F2"],
+[style*="background-color: #5865F2"] {
+  background-color: #36393f !important;
+}
+
+/* Переопределение для активного состояния при наведении */
+.active, 
+.selected, 
+*:hover[class*="active"] {
+  background-color: #42464D !important;
+}
+
+/* Переопределение для футера профиля */
+.profile-footer,
+.user-panel-footer,
+.current-user-panel {
+  background-color: #36393f !important;
+}

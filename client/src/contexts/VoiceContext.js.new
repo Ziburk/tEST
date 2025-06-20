@@ -1,0 +1,463 @@
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
+import SimplePeer from 'simple-peer';
+import { useAuth } from './AuthContext';
+import { useChat } from './ChatContext';
+import { useServer } from './ServerContext';
+
+// Polyfill for process
+if (typeof process === 'undefined') {
+  window.process = {
+    env: { NODE_ENV: 'production' }
+  };
+}
+
+const VoiceContext = createContext();
+
+export const useVoice = () => useContext(VoiceContext);
+
+export const VoiceProvider = ({ children }) => {
+  const { currentUser } = useAuth();
+  const { socket } = useChat();
+  const { currentChannel } = useServer();
+  const [inVoiceChannel, setInVoiceChannel] = useState(false);
+  const [connectedUsers, setConnectedUsers] = useState([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(true);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState({});
+  const [error, setError] = useState(null);
+  
+  // Keep track of peer connections
+  const peersRef = useRef({});
+  // Keep track of audio/video streams from peers
+  const streamsRef = useRef({});
+
+  // Cleanup streams when unmounting
+  useEffect(() => {
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      
+      // Close all peer connections
+      Object.values(peersRef.current).forEach(peer => {
+        if (peer && peer.destroy) {
+          peer.destroy();
+        }
+      });
+    };
+  }, [localStream]);
+
+  // Handle remote stream
+  const handleRemoteStream = useCallback((userId, stream) => {
+    console.log(`Received stream from ${userId}:`, stream);
+    
+    // Store stream in state for UI rendering first
+    setRemoteStreams(prev => ({
+      ...prev,
+      [userId]: stream
+    }));
+
+    // Create an audio element for audio tracks
+    if (stream.getAudioTracks().length > 0) {
+      let audioElement = document.getElementById(`audio-${userId}`);
+      
+      if (!audioElement) {
+        audioElement = document.createElement('audio');
+        audioElement.id = `audio-${userId}`;
+        audioElement.autoplay = true;
+        audioElement.controls = false;
+        audioElement.style.display = 'none';
+        document.body.appendChild(audioElement);
+      }
+      
+      const audioStream = new MediaStream(stream.getAudioTracks());
+      audioElement.srcObject = audioStream;
+    }
+
+    // Update streams ref for peer management
+    streamsRef.current[userId] = stream;
+  }, []);
+
+  // Start local audio and video stream
+  const startLocalStream = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasAudio = devices.some(device => device.kind === 'audioinput');
+      const hasVideo = devices.some(device => device.kind === 'videoinput');
+      
+      console.log('Available devices:', { hasAudio, hasVideo });
+      
+      const constraints = {
+        audio: hasAudio ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } : false,
+        video: hasVideo ? {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user",
+          frameRate: { ideal: 30 }
+        } : false
+      };
+      
+      console.log('Requesting media with constraints:', constraints);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('Got local stream:', stream);
+      
+      // Apply state settings to tracks
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+      
+      stream.getVideoTracks().forEach(track => {
+        track.enabled = !isVideoOff;
+      });
+      
+      setLocalStream(stream);
+      return stream;
+    } catch (err) {
+      console.error('Error in startLocalStream:', err);
+      setError(`Failed to access media devices: ${err.message}`);
+      
+      // Create empty stream as fallback
+      const emptyStream = new MediaStream();
+      setLocalStream(emptyStream);
+      setIsVideoOff(true);
+      setIsMuted(true);
+      return emptyStream;
+    }
+  }, [isMuted, isVideoOff]);
+
+  // Create a peer connection
+  const createPeer = useCallback((userId, isInitiator) => {
+    console.log(`Creating peer with ${userId}, initiator: ${isInitiator}`);
+    
+    try {
+      const peer = new SimplePeer({
+        initiator: isInitiator,
+        trickle: false,
+        stream: localStream,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
+      
+      peer.on('signal', signal => {
+        console.log(`Sending signal to ${userId}`);
+        socket?.emit('signal', { userId, signal });
+      });
+      
+      peer.on('stream', stream => {
+        console.log(`Received stream from ${userId}`);
+        handleRemoteStream(userId, stream);
+      });
+      
+      peer.on('error', err => {
+        console.error(`Peer error with ${userId}:`, err);
+        setError(`WebRTC error: ${err.message}`);
+      });
+      
+      peer.on('close', () => {
+        console.log(`Peer connection with ${userId} closed`);
+        delete peersRef.current[userId];
+        
+        setRemoteStreams(prev => {
+          const newState = { ...prev };
+          delete newState[userId];
+          return newState;
+        });
+      });
+      
+      return peer;
+    } catch (err) {
+      console.error('Error creating peer:', err);
+      setError(`Failed to create peer connection: ${err.message}`);
+      return null;
+    }
+  }, [localStream, socket, handleRemoteStream]);
+
+  // Toggle video
+  const toggleVideo = useCallback(async () => {
+    if (!localStream) return;
+
+    const videoTracks = localStream.getVideoTracks();
+    
+    if (videoTracks.length > 0) {
+      videoTracks.forEach(track => {
+        track.enabled = isVideoOff;
+      });
+      
+      setIsVideoOff(!isVideoOff);
+      
+      if (socket && currentChannel) {
+        socket.emit('voice:video', { channelId: currentChannel.id, videoOff: !isVideoOff });
+      }
+
+      // Renegotiate with all peers
+      Object.entries(peersRef.current).forEach(([userId, peer]) => {
+        if (peer && peer.streams && peer.streams[0]) {
+          const stream = peer.streams[0];
+          stream.getVideoTracks().forEach(track => {
+            track.enabled = !isVideoOff;
+          });
+        }
+      });
+    } else if (!isVideoOff) {
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ 
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: "user",
+            frameRate: { ideal: 30 }
+          } 
+        });
+
+        const videoTrack = videoStream.getVideoTracks()[0];
+        localStream.addTrack(videoTrack);
+        
+        // Update all peers with the new stream
+        Object.values(peersRef.current).forEach(peer => {
+          if (peer) {
+            peer.removeStream(peer.streams[0]);
+            peer.addStream(localStream);
+          }
+        });
+        
+        setIsVideoOff(false);
+        
+        if (socket && currentChannel) {
+          socket.emit('voice:video', { channelId: currentChannel.id, videoOff: false });
+        }
+      } catch (err) {
+        console.error('Error turning on camera:', err);
+        setError(`Camera access error: ${err.message}`);
+      }
+    }
+  }, [localStream, isVideoOff, socket, currentChannel]);
+
+  // Set up socket listeners
+  useEffect(() => {
+    if (!socket || !currentUser) return;
+
+    const handleUserJoined = async ({ userId, username }) => {
+      console.log(`User joined voice: ${username} (${userId})`);
+      
+      if (userId === currentUser.id) return;
+      
+      setConnectedUsers(prev => {
+        if (!prev.find(user => user.id === userId)) {
+          return [...prev, { id: userId, username }];
+        }
+        return prev;
+      });
+      
+      if (!localStream) {
+        await startLocalStream();
+      }
+      
+      const peer = createPeer(userId, true);
+      if (peer) {
+        peersRef.current[userId] = peer;
+      }
+    };
+
+    const handleUserLeft = ({ userId }) => {
+      console.log(`User left voice: ${userId}`);
+      
+      setConnectedUsers(prev => prev.filter(user => user.id !== userId));
+      
+      if (peersRef.current[userId]) {
+        peersRef.current[userId].destroy();
+        delete peersRef.current[userId];
+      }
+      
+      if (streamsRef.current[userId]) {
+        delete streamsRef.current[userId];
+      }
+
+      setRemoteStreams(prev => {
+        const newState = { ...prev };
+        delete newState[userId];
+        return newState;
+      });
+    };
+
+    const handleSignal = async ({ userId, signal }) => {
+      console.log(`Received signal from ${userId}`);
+      
+      if (!peersRef.current[userId]) {
+        if (!localStream) {
+          await startLocalStream();
+        }
+        
+        const peer = createPeer(userId, false);
+        if (peer) {
+          peersRef.current[userId] = peer;
+        }
+      }
+      
+      peersRef.current[userId]?.signal(signal);
+    };
+
+    socket.on('voice:user-joined', handleUserJoined);
+    socket.on('voice:user-left', handleUserLeft);
+    socket.on('signal', handleSignal);
+    
+    return () => {
+      socket.off('voice:user-joined', handleUserJoined);
+      socket.off('voice:user-left', handleUserLeft);
+      socket.off('signal', handleSignal);
+    };
+  }, [socket, currentUser, localStream, createPeer, startLocalStream]);
+
+  // Join a voice channel
+  const joinVoiceChannel = async (channelId) => {
+    if (inVoiceChannel) {
+      console.log('Already in a voice channel');
+      return false;
+    }
+    
+    if (!socket) {
+      console.error('Socket not connected');
+      setError('Chat service not connected');
+      return false;
+    }
+    
+    try {
+      // Получаем медиа-поток если его еще нет
+      let stream = localStream;
+      if (!stream) {
+        try {
+          stream = await startLocalStream();
+          // Небольшая пауза для инициализации потока
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (mediaErr) {
+          console.warn('Continuing with empty stream:', mediaErr);
+          // Создаем пустой поток если не удалось получить медиа
+          stream = new MediaStream();
+          setLocalStream(stream);
+          setIsVideoOff(true);
+          setIsMuted(true);
+        }
+      }
+      
+      // Присоединяемся к голосовому каналу
+      socket.emit('voice:join', { 
+        channelId, 
+        userId: currentUser.id, 
+        username: currentUser.username,
+        hasAudio: stream.getAudioTracks().length > 0,
+        hasVideo: stream.getVideoTracks().length > 0
+      });
+      
+      socket.emit('channel:join', channelId);
+      
+      // Отправляем начальные состояния микрофона и камеры
+      socket.emit('voice:mute', { channelId, muted: isMuted });
+      socket.emit('voice:video', { channelId, videoOff: isVideoOff });
+      
+      setInVoiceChannel(true);
+      return true;
+    } catch (err) {
+      console.error('Error joining voice channel:', err);
+      setError(`Ошибка подключения к голосовому каналу: ${err.message || 'Неизвестная ошибка'}`);
+      return false;
+    }
+  };
+  
+  // Leave the voice channel
+  const leaveVoiceChannel = async () => {
+    if (!inVoiceChannel || !currentChannel) return;
+    
+    try {
+      // Notify server about leaving
+      socket.emit('channel:leave', currentChannel.id);
+      
+      // Stop local stream
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        setLocalStream(null);
+      }
+      
+      // Close all peer connections
+      Object.values(peersRef.current).forEach(peer => {
+        if (peer && peer.destroy) {
+          peer.destroy();
+        }
+      });
+      
+      peersRef.current = {};
+      streamsRef.current = {};
+      
+      // Remove audio elements
+      connectedUsers.forEach(user => {
+        const audioElement = document.getElementById(`audio-${user.id}`);
+        if (audioElement) {
+          audioElement.remove();
+        }
+      });
+      
+      // Clear remote streams
+      setRemoteStreams({});
+      setConnectedUsers([]);
+      setInVoiceChannel(false);
+      return true;
+    } catch (err) {
+      console.error('Error leaving voice channel:', err);
+      setError(`Failed to leave voice channel: ${err.message}`);
+      return false;
+    }
+  };
+  
+  // Toggle mute
+  const toggleMute = () => {
+    if (localStream) {
+      const audioTracks = localStream.getAudioTracks();
+      
+      audioTracks.forEach(track => {
+        track.enabled = isMuted; // toggle the state
+      });
+      
+      setIsMuted(!isMuted);
+      
+      // Notify others about mute status
+      if (socket && currentChannel) {
+        socket.emit('voice:mute', { channelId: currentChannel.id, muted: !isMuted });
+      }
+    }
+  };
+
+  const value = {
+    inVoiceChannel,
+    connectedUsers,
+    localStream,
+    remoteStreams,
+    isMuted,
+    isVideoOff,
+    error,
+    joinVoiceChannel,
+    leaveVoiceChannel,
+    toggleMute,
+    toggleVideo
+  };
+
+  return (
+    <VoiceContext.Provider value={value}>
+      {children}
+    </VoiceContext.Provider>
+  );
+};
+
+export default VoiceContext;
+
+
+
+
+

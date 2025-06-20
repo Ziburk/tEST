@@ -1,0 +1,13 @@
+.dashboard {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Responsive behavior for smaller screens */
+@media (max-width: 768px) {
+  .dashboard {
+    flex-direction: column;
+  }
+}
